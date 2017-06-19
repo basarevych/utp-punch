@@ -1,0 +1,18 @@
+{
+  "name": "utp-punch",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": "Ross Basarevych <basarevych@gmail.com>",
+  "description": "UTP over UDP with hole punching",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/basarevych/utp-punch.git"
+  },
+  "dependencies": {
+    "cyclist": "~1.0.1",
+    "debug": "~2.6.8"
+  },
+  "scripts": {
+    "test": "node tests"
+  }
+}

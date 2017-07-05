@@ -33,11 +33,23 @@ class Node extends EventEmitter {
         return this._socket.address();
     }
 
-    bind(port, host) {
+    bind(port, host, onbound) {
         if (this._closed)
             throw new Error('Node is closed');
         if (this._bound)
             throw new Error('Node is already bound');
+
+        if (typeof host === 'function') {
+            onbound = host;
+            host = undefined;
+        } else if (typeof port === 'function') {
+            onbound = port;
+            port = undefined;
+            host = undefined;
+        }
+
+        if (onbound)
+            this.once('bound', onbound);
 
         this._socket.once('listening', () => {
             this._bound = true;

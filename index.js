@@ -19,6 +19,7 @@ class Node extends EventEmitter {
         this._clients = new Map();
 
         this._socket.on('message', this.onMessage.bind(this));
+        this._socket.on('error', error => { this.emit('error', error); });
 
         if (onconnection)
             this.on('connection', onconnection);

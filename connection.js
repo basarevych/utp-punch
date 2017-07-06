@@ -166,6 +166,18 @@ class Connection extends Duplex {
         this._timeoutMax = timeout;
     }
 
+    getTimeout() {
+        return this._timeoutMax;
+    }
+
+    setMtu(mtu) {
+        this._mtu = mtu;
+    }
+
+    getMtu() {
+        return this._mtu;
+    }
+
     destroy() {
         this.push(null);
         this.end();

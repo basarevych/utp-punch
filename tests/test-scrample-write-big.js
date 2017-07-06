@@ -20,11 +20,10 @@ let client = new Node();
 client.bind();
 client.connect(53454, socket => {
     socket.write(big);
-    socket.end();
 
     socket.on('data', data => {
         recv += data.length;
-        console.log(recv);
+        socket.end();
     });
     socket.on('end', () => {
         assert(recv === big.length);

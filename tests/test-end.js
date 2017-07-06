@@ -4,6 +4,7 @@ const assert = require('assert');
 let ended = false;
 
 let server = new Node(socket => {
+    socket.resume();
 	socket.on('end', () => {
 		ended = true;
 	});
@@ -14,6 +15,7 @@ server.listen();
 let client = new Node();
 client.bind();
 client.connect(53454, socket => {
+    socket.resume();
     socket.on('end', function() {
         assert(ended);
         process.exit(0);

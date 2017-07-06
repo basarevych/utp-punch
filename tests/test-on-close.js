@@ -7,6 +7,7 @@ let onclose = () => {
 };
 
 let server = new Node(socket => {
+    socket.resume();
 	socket.on('close', onclose);
 });
 server.bind(53454);
@@ -15,6 +16,7 @@ server.listen();
 let client = new Node();
 client.bind();
 client.connect(53454, socket => {
+    socket.resume();
     socket.on('close', onclose);
     socket.end();
 });

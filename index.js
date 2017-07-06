@@ -6,17 +6,26 @@ const connection = require('./connection');
 const PUNCH_SYN = "PUNCH";
 const PUNCH_ACK = "PUNCHED";
 
+const ID_LIFETIME = 10 * 1000; // ms
+
 class Node extends EventEmitter {
-    constructor(onconnection) {
+    constructor(options, onconnection) {
         super();
-        this._options = {};
+
+        if (typeof options === 'function') {
+            onconnection = options;
+            options = undefined;
+        }
+
+        this._options = options || {};
         this._socket = dgram.createSocket('udp4');
         this._socket.setMaxListeners(0);
         this._bound = false;
         this._closed = false;
-        this._mode = null;
-        this._server = null;
-        this._clients = new Map();
+        this._serverConnections = null;
+        this._clientConnections = new Map();
+        this._idCache = new Map();
+        this._idTimer = null;
 
         this._socket.on('message', this.onMessage.bind(this));
         this._socket.on('error', error => { this.emit('error', error); });
@@ -123,10 +132,10 @@ class Node extends EventEmitter {
     listen(onlistening) {
         if (this._closed)
             throw new Error('Node is closed');
-        if (this._server)
+        if (this._serverConnections)
             throw new Error('Node is already listening');
 
-        this._server = new Map();
+        this._serverConnections = new Map();
 
         if (onlistening)
             this.once('listening', onlistening);
@@ -149,19 +158,23 @@ class Node extends EventEmitter {
             host = '127.0.0.1';
         }
 
-        let key = this._getKey(host, port);
-        if (this._clients.has(key))
-            throw new Error('Node is already connected to this peer');
-
-        let socket = new connection.Connection(port, host, this._socket, null, this._options);
-        this._clients.set(key, socket);
+        let id = this._generateId(host, port);
+        let key = this._getKey(host, port, id);
+        let socket = new connection.Connection(id, port, host, this._socket, null, this._options);
+        this._clientConnections.set(key, socket);
 
         socket.once('close', () => {
-            this._clients.delete(key);
+            let cacheKey = this._getKey(host, port);
+            let cache = this._idCache.get(cacheKey);
+            if (!cache) {
+                cache = new Map();
+                this._idCache.set(cacheKey, cache);
+            }
+            cache.set(id, Date.now());
+            this._clientConnections.delete(key);
         });
 
         socket.once('connect', function () {
-            socket.resume();
             this.emit('connect', socket);
             if (onconnect)
                 onconnect(socket);
@@ -175,75 +188,132 @@ class Node extends EventEmitter {
             });
         }
 
+        if (!this._idTimer)
+            this._idTimer = setInterval(this.onIdTimer.bind(this), 1000);
+
         return socket;
     }
 
-    close(cb) {
-        let openConnections = 0;
-        this._closed = true;
+    close(onclose) {
+        if (this._closed) return;
 
-        let onClose = () => {
-            if (--openConnections === 0) {
-                if (this._socket) this._socket.close();
-                if (cb) cb();
+        let openConnections = 0;
+
+        let done = () => {
+            if (this._socket) this._socket.close();
+            if (this._idTimer) {
+                clearInterval(this._idTimer);
+                this._idTimer = null;
             }
+            this._closed = true;
+            this.emit('close');
+        };
+        let onClose = () => {
+            if (--openConnections === 0)
+                done();
         };
 
-        let clients = Array.from(this._clients.values());
-        if (this._server)
-            clients = clients.concat(Array.from(this._server.values()))
+        if (onclose)
+            this.once('close', onclose);
 
-        for (let client of clients) {
-            if (client._closed) continue;
+        let sockets = Array.from(this._clientConnections.values());
+        if (this._serverConnections)
+            sockets = sockets.concat(Array.from(this._serverConnections.values()));
+
+        for (let socket of sockets) {
+            if (socket._closed) continue;
             openConnections++;
-            client.once('close', onClose);
-            client.end();
+            socket.once('close', onClose);
+            socket.end();
         }
 
-        if (openConnections === 0) {
-            if (this._socket) this._socket.close();
-            if (cb) cb();
-        }
+        if (openConnections === 0)
+            done();
     }
 
     onMessage(message, rinfo) {
-        let client = this._clients.get(this._getKey(rinfo.address, rinfo.port));
-        if (client)
-            this._handleClient(client, message);
-        else if (this._server)
-            this._handleServer(message, rinfo);
+        if (this._closed) return;
+        if (message.length < connection.MIN_PACKET_SIZE) return;
+
+        let packet = connection.bufferToPacket(message);
+        let reply = false, id = packet.connection;
+        if (id % 2 !== 0) {
+            reply = true;
+            id--;
+        }
+
+        let key = this._getKey(rinfo.address, rinfo.port, id);
+        if (reply)
+            this._handleClient(key, packet);
+        else if (this._serverConnections)
+            this._handleServer(key, packet, rinfo);
     }
 
-    _handleServer(message, rinfo) {
-        if (message.length < connection.MIN_PACKET_SIZE) return;
-        let packet = connection.bufferToPacket(message);
-        let id = rinfo.address+':'+(packet.id === connection.PACKET_SYN ? connection.uint16(packet.connection+1) : packet.connection);
+    onIdTimer() {
+        let now = Date.now();
+        for (let [ key, cache ] of this._idCache) {
+            for (let [ id, expire ] of cache) {
+                if (expire && now - expire > ID_LIFETIME)
+                    cache.delete(id);
+            }
+        }
+    }
 
-        if (this._server.has(id)) return this._server.get(id)._recvIncoming(packet);
-        if (packet.id !== connection.PACKET_SYN || this._closed) return;
+    _handleServer(key, packet, rinfo) {
+        if (this._serverConnections.has(key))
+            return this._serverConnections.get(key)._recvIncoming(packet);
 
-        let socket = new connection.Connection(rinfo.port, rinfo.address, this._socket, packet, this._options);
-        this._server.set(id, socket);
+        if (packet.id !== connection.PACKET_SYN) {
+            debug(`Invalid incoming packet ${key}`);
+            return;
+        }
+
+        debug(`Incoming connection ${key}`);
+        let socket = new connection.Connection(packet.connection, rinfo.port, rinfo.address, this._socket, packet, this._options);
+        this._serverConnections.set(key, socket);
         socket.once('close', () => {
-            this._server.delete(id);
+            this._serverConnections.delete(key);
         });
 
-        socket.resume();
         this.emit('connection', socket);
     }
 
-    _handleClient(socket, message) {
-        if (message.length < connection.MIN_PACKET_SIZE) return;
-        let packet = connection.bufferToPacket(message);
-
-        if (packet.id === connection.PACKET_SYN) return;
-        if (packet.connection !== socket._recvId) return;
+    _handleClient(key, packet) {
+        let socket = this._clientConnections.get(key);
+        if (!socket) {
+            debug(`Invalid reply packet ${key}`);
+            return;
+        }
 
         socket._recvIncoming(packet);
     }
 
-    _getKey(host, port) {
-        return host + '/' + port;
+    _generateId(host, port) {
+        let cacheKey = this._getKey(host, port);
+        let cache = this._idCache.get(cacheKey);
+        if (!cache) {
+            cache = new Map();
+            this._idCache.set(cacheKey, cache);
+        }
+
+        let id = 2;
+        while (id < connection.MAX_CONNECTION_ID) {
+            let key = this._getKey(host, port, id);
+            if (!this._clientConnections.has(key) && !cache.has(id)) {
+                cache.set(id, 0);
+                return id;
+            }
+            id += 2;
+        }
+
+        throw new Error('Out of connections');
+    }
+
+    _getKey(host, port, id) {
+        let key = host + '/' + port;
+        if (id)
+            key += '/' + id;
+        return key;
     }
 }
 

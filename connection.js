@@ -16,6 +16,7 @@ const PACKET_RESET = 3 << 4;
 const PACKET_SYN   = 4 << 4;
 
 const MIN_PACKET_SIZE = 20;
+const MAX_CONNECTION_ID = 2 << 16 - 1;
 const DEFAULT_WINDOW_SIZE = 1 << 18;
 const CLOSE_GRACE = 3000;
 
@@ -53,7 +54,7 @@ const bufferToPacket = function(buffer) {
     return packet;
 };
 
-let packetToBuffer = function(packet) {
+const packetToBuffer = function(packet) {
     let buffer = Buffer.alloc(20 + (packet.data ? packet.data.length : 0));
     buffer[0] = packet.id | VERSION;
     buffer[1] = EXTENSION;
@@ -67,10 +68,10 @@ let packetToBuffer = function(packet) {
     return buffer;
 };
 
-let createPacket = function(connection, id, data) {
+const createPacket = function(connection, id, data) {
     return {
         id: id,
-        connection: id === PACKET_SYN ? connection._recvId : connection._sendId,
+        connection: connection._server ? uint16(connection.id + 1) : connection.id,
         seq: connection._seq,
         ack: connection._ack,
         timestamp: timestamp(),
@@ -82,10 +83,11 @@ let createPacket = function(connection, id, data) {
 };
 
 class Connection extends Duplex {
-    constructor(port, host, socket, syn, options) {
+    constructor(id, port, host, socket, syn, options) {
         super();
         this.setMaxListeners(0);
 
+        this.id = id;
         this.port = port;
         this.host = host;
         this.socket = socket;
@@ -104,21 +106,20 @@ class Connection extends Duplex {
         this._alive = false;
 
         if (syn) {
+            this._server = true;
             this._connecting = false;
-            this._recvId = uint16(syn.connection + 1);
-            this._sendId = syn.connection;
             this._seq = (Math.random() * UINT16) | 0;
             this._ack = syn.seq;
             this._synack = createPacket(this, PACKET_STATE, null);
 
             this._transmit(this._synack);
         } else {
+            this._server = false;
             this._connecting = true;
-            this._recvId = 0; // tmp value for v8 opt
-            this._sendId = 0; // tmp value for v8 opt
             this._seq = (Math.random() * UINT16) | 0;
             this._ack = 0;
             this._synack = null;
+            this._timeoutLast = Date.now();
 
             let onError = err => {
                 this.emit('error', err);
@@ -139,14 +140,18 @@ class Connection extends Duplex {
         };
 
         let sendFin = () => {
-            if (this._connecting) return this.once('connect', sendFin);
+            if (this._connecting) {
+                this.once('timeout', closed);
+                this.once('connect', sendFin);
+                return;
+            }
             this._sendOutgoing(createPacket(this, PACKET_FIN, null));
             this.once('flush', closed);
+            setTimeout(closed, CLOSE_GRACE);
         };
 
         this.once('finish', sendFin);
         this.once('close', () => {
-            if (!syn) setTimeout(socket.close.bind(socket), CLOSE_GRACE);
             clearInterval(resend);
             clearInterval(keepAlive);
             clearInterval(timeout);
@@ -172,8 +177,6 @@ class Connection extends Duplex {
     }
 
     _connect() {
-        this._recvId = this.socket.address().port; // using the port gives us system wide clash protection
-        this._sendId = uint16(this._recvId + 1);
         this._sendOutgoing(createPacket(this, PACKET_SYN, null));
     }
 
@@ -221,7 +224,7 @@ class Connection extends Duplex {
 
         if (uint32(first.sent - now) < timeout) return;
 
-        debug('Packet loss since #' + offset);
+        debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Packet loss since #${offset}`);
         for (let i = 0; i < this._inflightPackets; i++) {
             let packet = this._outgoing.get(offset+i);
             if (uint32(packet.sent - now) >= timeout) this._transmit(packet);
@@ -271,19 +274,19 @@ class Connection extends Duplex {
 
         switch (packet.id) {
             case PACKET_DATA:
-                debug('Received ' + (packet.data ? packet.data.length : 0) + ' of DATA #' + packet.seq + ', ACK #' + packet.ack);
+                debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Received ${packet.data ? packet.data.length : 0} of DATA #${packet.seq}, ACK #${packet.ack}`);
                 break;
             case PACKET_FIN:
-                debug('Received FIN #' + packet.seq + ', ACK #' + packet.ack);
+                debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Received FIN #${packet.seq}, ACK #${packet.ack}`);
                 break;
             case PACKET_STATE:
-                debug('Received STATE #' + packet.seq + ', ACK #' + packet.ack);
+                debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Received STATE #${packet.seq}, ACK #${packet.ack}`);
                 break;
             case PACKET_RESET:
-                debug('Received RESET #' + packet.seq + ', ACK #' + packet.ack);
+                debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Received RESET #${packet.seq}, ACK #${packet.ack}`);
                 break;
             case PACKET_SYN:
-                debug('Received SYN #' + packet.seq + ', ACK #' + packet.ack);
+                debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Received SYN #${packet.seq}, ACK #${packet.ack}`);
                 break;
         }
 
@@ -338,19 +341,19 @@ class Connection extends Duplex {
     _transmit(packet) {
         switch (packet.id) {
             case PACKET_DATA:
-                debug('Sent ' + (packet.data ? packet.data.length : 0) + ' of DATA #' + packet.seq + ', ACK #' + packet.ack);
+                debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Sent ${packet.data ? packet.data.length : 0} of DATA #${packet.seq}, ACK #${packet.ack}`);
                 break;
             case PACKET_FIN:
-                debug('Sent FIN #' + packet.seq + ', ACK #' + packet.ack);
+                debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Sent FIN #${packet.seq}, ACK #${packet.ack}`);
                 break;
             case PACKET_STATE:
-                debug('Sent STATE #' + packet.seq + ', ACK #' + packet.ack);
+                debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Sent STATE #${packet.seq}, ACK #${packet.ack}`);
                 break;
             case PACKET_RESET:
-                debug('Sent RESET #' + packet.seq + ', ACK #' + packet.ack);
+                debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Sent RESET #${packet.seq}, ACK #${packet.ack}`);
                 break;
             case PACKET_SYN:
-                debug('Sent SYN #' + packet.seq + ', ACK #' + packet.ack);
+                debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Sent SYN #${packet.seq}, ACK #${packet.ack}`);
                 break;
         }
 
@@ -369,6 +372,7 @@ module.exports = {
     PACKET_RESET,
     PACKET_SYN,
     MIN_PACKET_SIZE,
+    MAX_CONNECTION_ID,
     uint16,
     uint32,
     packetToBuffer,

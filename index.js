@@ -253,8 +253,13 @@ class Node extends EventEmitter {
         let now = Date.now();
         for (let [ key, cache ] of this._idCache) {
             for (let [ id, expire ] of cache) {
-                if (expire && now - expire > ID_LIFETIME)
+                if (expire && now - expire > ID_LIFETIME) {
                     cache.delete(id);
+                    if (!cache.size) {
+                        this._idCache.delete(key);
+                        break;
+                    }
+                }
             }
         }
     }

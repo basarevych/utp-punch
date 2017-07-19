@@ -21,6 +21,7 @@ class Node extends EventEmitter {
         this._socket = dgram.createSocket('udp4');
         this._socket.setMaxListeners(0);
         this._bound = false;
+        this._closing = false;
         this._closed = false;
         this._serverConnections = null;
         this._clientConnections = new Map();
@@ -43,7 +44,7 @@ class Node extends EventEmitter {
     }
 
     bind(port, host, onbound) {
-        if (this._closed)
+        if (this._closing || this._closed)
             throw new Error('Node is closed');
         if (this._bound)
             throw new Error('Node is already bound');
@@ -68,7 +69,7 @@ class Node extends EventEmitter {
     }
 
     punch(attempts, port, host = '127.0.0.1', cb = undefined) {
-        if (this._closed)
+        if (this._closing || this._closed)
             throw new Error('Node is closed');
 
         if (typeof host === 'function') {
@@ -130,7 +131,7 @@ class Node extends EventEmitter {
     }
 
     listen(onlistening) {
-        if (this._closed)
+        if (this._closing || this._closed)
             throw new Error('Node is closed');
         if (this._serverConnections)
             throw new Error('Node is already listening');
@@ -150,7 +151,7 @@ class Node extends EventEmitter {
     }
 
     connect(port, host = '127.0.0.1', onconnect = undefined) {
-        if (this._closed)
+        if (this._closing || this._closed)
             throw new Error('Node is closed');
 
         if (typeof host === 'function') {
@@ -195,7 +196,8 @@ class Node extends EventEmitter {
     }
 
     close(onclose) {
-        if (this._closed) return;
+        if (this._closing || this._closed) return;
+        this._closing = true;
 
         let openConnections = 0;
 
@@ -205,6 +207,7 @@ class Node extends EventEmitter {
                 clearInterval(this._idTimer);
                 this._idTimer = null;
             }
+            this._closing = false;
             this._closed = true;
             this.emit('close');
         };
@@ -272,6 +275,9 @@ class Node extends EventEmitter {
             debug(`Invalid incoming packet ${key}`);
             return;
         }
+
+        if (this._closing)
+            return;
 
         debug(`Incoming connection ${key}`);
         let socket = new connection.Connection(packet.connection, rinfo.port, rinfo.address, this._socket, packet, this._options);

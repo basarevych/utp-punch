@@ -95,7 +95,7 @@ class Connection extends Duplex {
         this._incoming = cyclist(this._bufferSize);
 
         this._timeoutMax = options.timeout || 5000;
-        this._timeoutLast = Date.now();
+        this._timeoutSince = Date.now();
 
         this._mtu = options.mtu || MTU;
         this._inflightPackets = 0;
@@ -142,7 +142,7 @@ class Connection extends Duplex {
         let sendFin = () => {
             if (this._connecting) {
                 if (this._timeoutMax) {
-                    if (this._timeoutLast)
+                    if (this._timeoutSince)
                         this.once('timeout', noAnswer);
                     else
                         noAnswer();
@@ -155,7 +155,7 @@ class Connection extends Duplex {
             this._sendOutgoing(createPacket(this, PACKET_FIN, null));
             this.once('flush', closed);
             if (this._timeoutMax) {
-                if (this._timeoutLast)
+                if (this._timeoutSince)
                     this.once('timeout', closed);
                 else
                     closed();
@@ -176,7 +176,7 @@ class Connection extends Duplex {
 
     setTimeout(timeout) {
         this._timeoutMax = timeout;
-        this._timeoutLast = Date.now();
+        this._timeoutSince = Date.now();
     }
 
     getTimeout() {
@@ -262,11 +262,11 @@ class Connection extends Duplex {
     }
 
     _timeout() {
-        if (!this._timeoutMax || !this._timeoutLast)
+        if (!this._timeoutMax || !this._timeoutSince)
             return;
 
-        if (Date.now() - this._timeoutLast >= this._timeoutMax) {
-            this._timeoutLast = 0;
+        if (Date.now() - this._timeoutSince >= this._timeoutMax) {
+            this._timeoutSince = 0;
             this.emit('timeout');
         }
     }
@@ -295,7 +295,7 @@ class Connection extends Duplex {
     _recvIncoming(packet) {
         if (this._closed) return;
 
-        this._timeoutLast = Date.now();
+        this._timeoutSince = Date.now();
 
         switch (packet.id) {
             case PACKET_DATA:
@@ -329,7 +329,6 @@ class Connection extends Duplex {
             this._ack = uint16(packet.seq-1);
             this._recvAck(packet.ack);
             this._connecting = false;
-            this._timeoutLast = Date.now();
             this.emit('connect');
 
             packet = this._incoming.del(packet.seq);

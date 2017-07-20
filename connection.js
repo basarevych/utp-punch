@@ -18,7 +18,6 @@ const PACKET_SYN   = 4 << 4;
 const MIN_PACKET_SIZE = 20;
 const MAX_CONNECTION_ID = 2 << 16 - 1;
 const DEFAULT_WINDOW_SIZE = 1 << 18;
-const CLOSE_GRACE = 3000;
 
 const BUFFER_SIZE = 512;
 
@@ -96,7 +95,7 @@ class Connection extends Duplex {
         this._incoming = cyclist(this._bufferSize);
 
         this._timeoutMax = options.timeout || 0;
-        this._timeoutLast = 0;
+        this._timeoutLast = Date.now();
 
         this._mtu = options.mtu || MTU;
         this._inflightPackets = 0;
@@ -117,7 +116,6 @@ class Connection extends Duplex {
             this._seq = (Math.random() * UINT16) | 0;
             this._ack = 0;
             this._synack = null;
-            this._timeoutLast = Date.now();
 
             let onError = err => {
                 this.emit('error', err);
@@ -136,15 +134,32 @@ class Connection extends Duplex {
         let closed = () => {
             if (++tick === 2) this._closing();
         };
+        let noAnswer = () => {
+            this.push(null);
+            closed();
+        };
 
         let sendFin = () => {
             if (this._connecting) {
-                this.once('timeout', closed);
-                this.once('connect', sendFin);
+                if (this._timeoutMax) {
+                    if (this._timeoutLast)
+                        this.once('timeout', noAnswer);
+                    else
+                        noAnswer();
+                } else {
+                    this.once('connect', sendFin);
+                }
                 return;
             }
+
             this._sendOutgoing(createPacket(this, PACKET_FIN, null));
             this.once('flush', closed);
+            if (this._timeoutMax) {
+                if (this._timeoutLast)
+                    this.once('timeout', closed);
+                else
+                    closed();
+            }
         };
 
         this.once('finish', sendFin);
@@ -154,7 +169,6 @@ class Connection extends Duplex {
             clearInterval(timeout);
         });
         this.once('end', () => {
-            setTimeout(closed, CLOSE_GRACE);
             this.end();
             process.nextTick(closed);
         });
@@ -162,6 +176,7 @@ class Connection extends Duplex {
 
     setTimeout(timeout) {
         this._timeoutMax = timeout;
+        this._timeoutLast = Date.now();
     }
 
     getTimeout() {
@@ -250,7 +265,7 @@ class Connection extends Duplex {
         if (!this._timeoutMax || !this._timeoutLast)
             return;
 
-        if (Date.now() - this._timeoutLast > this._timeoutMax) {
+        if (Date.now() - this._timeoutLast >= this._timeoutMax) {
             this._timeoutLast = 0;
             this.emit('timeout');
         }
@@ -314,6 +329,7 @@ class Connection extends Duplex {
             this._ack = uint16(packet.seq-1);
             this._recvAck(packet.ack);
             this._connecting = false;
+            this._timeoutLast = Date.now();
             this.emit('connect');
 
             packet = this._incoming.del(packet.seq);

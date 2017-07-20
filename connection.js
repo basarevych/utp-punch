@@ -94,7 +94,7 @@ class Connection extends Duplex {
         this._outgoing = cyclist(this._bufferSize);
         this._incoming = cyclist(this._bufferSize);
 
-        this._timeoutMax = options.timeout || 0;
+        this._timeoutMax = options.timeout || 5000;
         this._timeoutLast = Date.now();
 
         this._mtu = options.mtu || MTU;

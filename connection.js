@@ -21,7 +21,6 @@ const DEFAULT_WINDOW_SIZE = 1 << 18;
 const CLOSE_GRACE = 3000;
 
 const BUFFER_SIZE = 512;
-const INFLIGHT_PACKETS = 100; // up to BUFFER_SIZE - 1
 
 const uint32 = function(n) {
     return n >>> 0;
@@ -100,7 +99,6 @@ class Connection extends Duplex {
         this._timeoutLast = 0;
 
         this._mtu = options.mtu || MTU;
-        this._maxInflightPackets = options.inflightPackets || INFLIGHT_PACKETS;
         this._inflightPackets = 0;
         this._closed = false;
         this._alive = false;
@@ -218,7 +216,7 @@ class Connection extends Duplex {
     }
 
     _writable() {
-        return this._inflightPackets < this._maxInflightPackets;
+        return this._inflightPackets < this._bufferSize - 1;
     }
 
     _payload(data) {

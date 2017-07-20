@@ -145,7 +145,6 @@ class Connection extends Duplex {
             }
             this._sendOutgoing(createPacket(this, PACKET_FIN, null));
             this.once('flush', closed);
-            setTimeout(closed, CLOSE_GRACE);
         };
 
         this.once('finish', sendFin);
@@ -155,6 +154,7 @@ class Connection extends Duplex {
             clearInterval(timeout);
         });
         this.once('end', () => {
+            setTimeout(closed, CLOSE_GRACE);
             this.end();
             process.nextTick(closed);
         });

@@ -6,7 +6,7 @@ const connection = require('./connection');
 const PUNCH_SYN = "PUNCH";
 const PUNCH_ACK = "PUNCHED";
 
-const ID_LIFETIME = 10 * 1000; // ms
+const ID_LIFETIME = 5 * 1000; // ms
 
 class Node extends EventEmitter {
     constructor(options, onconnection) {
@@ -25,10 +25,8 @@ class Node extends EventEmitter {
         this._closed = false;
         this._serverConnections = null;
         this._clientConnections = new Map();
-        this._idStart = Math.floor(Math.random() * (connection.MAX_CONNECTION_ID + 1));
-        this._idCache = new Map();
-        this._idTimer = null;
 
+        this._idStart = Math.floor(Math.random() * (connection.MAX_CONNECTION_ID + 1));
         if (this._idStart % 2)
             this._idStart--;
 
@@ -169,14 +167,9 @@ class Node extends EventEmitter {
         this._clientConnections.set(key, socket);
 
         socket.once('close', () => {
-            let cacheKey = this._getKey(host, port);
-            let cache = this._idCache.get(cacheKey);
-            if (!cache) {
-                cache = new Map();
-                this._idCache.set(cacheKey, cache);
-            }
-            cache.set(id, Date.now());
-            this._clientConnections.delete(key);
+            setTimeout(() => {
+                this._clientConnections.delete(key);
+            }, ID_LIFETIME);
         });
 
         socket.once('connect', function () {
@@ -193,9 +186,6 @@ class Node extends EventEmitter {
             });
         }
 
-        if (!this._idTimer)
-            this._idTimer = setInterval(this.onIdTimer.bind(this), 1000);
-
         return socket;
     }
 
@@ -207,12 +197,10 @@ class Node extends EventEmitter {
 
         let done = () => {
             if (this._socket) this._socket.close();
-            if (this._idTimer) {
-                clearInterval(this._idTimer);
-                this._idTimer = null;
-            }
             this._closing = false;
             this._closed = true;
+            this._clientConnections.clear();
+            this._serverConnections.clear();
             this.emit('close');
         };
         let onClose = () => {
@@ -262,21 +250,6 @@ class Node extends EventEmitter {
             connection.Connection.reset(this._socket, rinfo.port, rinfo.address, packet.connection + 1);
     }
 
-    onIdTimer() {
-        let now = Date.now();
-        for (let [ key, cache ] of this._idCache) {
-            for (let [ id, expire ] of cache) {
-                if (expire && now - expire > ID_LIFETIME) {
-                    cache.delete(id);
-                    if (!cache.size) {
-                        this._idCache.delete(key);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
     _handleServer(key, packet, rinfo) {
         if (this._serverConnections.has(key))
             return this._serverConnections.get(key)._recvIncoming(packet);
@@ -296,7 +269,9 @@ class Node extends EventEmitter {
         let socket = new connection.Connection(packet.connection, rinfo.port, rinfo.address, this._socket, packet, this._options);
         this._serverConnections.set(key, socket);
         socket.once('close', () => {
-            this._serverConnections.delete(key);
+            setTimeout(() => {
+                this._serverConnections.delete(key);
+            }, ID_LIFETIME);
         });
 
         this.emit('connection', socket);
@@ -314,13 +289,6 @@ class Node extends EventEmitter {
     }
 
     _generateId(host, port) {
-        let cacheKey = this._getKey(host, port);
-        let cache = this._idCache.get(cacheKey);
-        if (!cache) {
-            cache = new Map();
-            this._idCache.set(cacheKey, cache);
-        }
-
         let range = 0;
         while (range <= connection.MAX_CONNECTION_ID) {
             let id = this._idStart + range;
@@ -328,10 +296,8 @@ class Node extends EventEmitter {
                 id -= connection.MAX_CONNECTION_ID + 2;
 
             let key = this._getKey(host, port, id);
-            if (!this._clientConnections.has(key) && !cache.has(id)) {
-                cache.set(id, 0);
+            if (!this._clientConnections.has(key))
                 return id;
-            }
 
             range += 2;
         }

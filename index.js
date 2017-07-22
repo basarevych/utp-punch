@@ -239,21 +239,27 @@ class Node extends EventEmitter {
     }
 
     onMessage(message, rinfo) {
-        if (this._closed) return;
         if (message.length < connection.MIN_PACKET_SIZE) return;
 
         let packet = connection.bufferToPacket(message);
         let reply = false, id = packet.connection;
-        if (id % 2 !== 0) {
+        if (id % 2) {
             reply = true;
             id--;
         }
 
+        if (this._closed) {
+            connection.Connection.reset(this._socket, rinfo.port, rinfo.address, reply ? packet.connection - 1 : packet.connection + 1);
+            return;
+        }
+
         let key = this._getKey(rinfo.address, rinfo.port, id);
         if (reply)
-            this._handleClient(key, packet);
+            this._handleClient(key, packet, rinfo);
         else if (this._serverConnections)
             this._handleServer(key, packet, rinfo);
+        else
+            connection.Connection.reset(this._socket, rinfo.port, rinfo.address, packet.connection + 1);
     }
 
     onIdTimer() {
@@ -277,11 +283,14 @@ class Node extends EventEmitter {
 
         if (packet.id !== connection.PACKET_SYN) {
             debug(`Invalid incoming packet ${key}`);
+            connection.Connection.reset(this._socket, rinfo.port, rinfo.address, packet.connection + 1);
             return;
         }
 
-        if (this._closing)
+        if (this._closing) {
+            connection.Connection.reset(this._socket, rinfo.port, rinfo.address, packet.connection + 1);
             return;
+        }
 
         debug(`Incoming connection ${key}`);
         let socket = new connection.Connection(packet.connection, rinfo.port, rinfo.address, this._socket, packet, this._options);
@@ -293,10 +302,11 @@ class Node extends EventEmitter {
         this.emit('connection', socket);
     }
 
-    _handleClient(key, packet) {
+    _handleClient(key, packet, rinfo) {
         let socket = this._clientConnections.get(key);
         if (!socket) {
             debug(`Invalid reply packet ${key}`);
+            connection.Connection.reset(this._socket, rinfo.port, rinfo.address, packet.connection - 1);
             return;
         }
 

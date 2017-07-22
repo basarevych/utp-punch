@@ -174,14 +174,19 @@ class Connection extends Duplex {
         });
     }
 
-    static reset(socket, port, host, id) {
-        let conn = {
-            id: id,
-            _server: false,
-            _seq: 0,
-            _ack: 0,
-        };
-        let message = packetToBuffer(createPacket(conn, PACKET_RESET, null));
+    static reset(socket, port, host, connection) {
+        let obj;
+        if (typeof connection === 'object') {
+            obj = connection;
+        } else {
+            obj = {
+                id: connection,
+                _server: false,
+                _seq: 0,
+                _ack: 0,
+            };
+        }
+        let message = packetToBuffer(createPacket(obj, PACKET_RESET, null));
         socket.send(message, 0, message.length, port, host);
     }
 
@@ -304,7 +309,7 @@ class Connection extends Duplex {
     }
 
     _recvIncoming(packet) {
-        if (this._closed) return this.constructor.reset(this._socket, this.port, this.host, this._server ? packet.connection + 1 : packet.connection);
+        if (this._closed) return this.constructor.reset(this._socket, this.port, this.host, this);
 
         this._timeoutSince = Date.now();
 

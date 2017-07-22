@@ -139,27 +139,24 @@ class Connection extends Duplex {
             this._closing();
         };
 
+        let connectingTimer;
         let sendFin = () => {
             if (this._connecting) {
-                if (this._timeoutMax) {
-                    if (this._timeoutSince)
-                        this.once('timeout', noAnswer);
-                    else
-                        noAnswer();
-                } else {
-                    this.once('connect', sendFin);
-                }
+                this.once('connect', sendFin);
+                if (this._timeoutMax)
+                    connectingTimer = setTimeout(noAnswer, this._timeoutMax);
                 return;
+            }
+
+            if (connectingTimer) {
+                clearTimeout(connectingTimer);
+                connectingTimer = null;
             }
 
             this._sendOutgoing(createPacket(this, PACKET_FIN, null));
             this.once('flush', closed);
-            if (this._timeoutMax) {
-                if (this._timeoutSince)
-                    this.once('timeout', noAnswer);
-                else
-                    noAnswer();
-            }
+            if (this._timeoutMax)
+                setTimeout(noAnswer, this._timeoutMax);
         };
 
         this.once('finish', sendFin);

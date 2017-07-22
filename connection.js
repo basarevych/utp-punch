@@ -306,7 +306,7 @@ class Connection extends Duplex {
     }
 
     _recvIncoming(packet) {
-        if (this._closed) return this.constructor.reset(this._socket, this.port, this.host, this);
+        if (this._closed) return this.constructor.reset(this.socket, this.port, this.host, this);
 
         this._timeoutSince = Date.now();
 

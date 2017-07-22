@@ -136,7 +136,7 @@ class Connection extends Duplex {
         };
         let noAnswer = () => {
             this.push(null);
-            closed();
+            this._closing();
         };
 
         let sendFin = () => {

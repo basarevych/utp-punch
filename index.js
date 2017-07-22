@@ -25,8 +25,12 @@ class Node extends EventEmitter {
         this._closed = false;
         this._serverConnections = null;
         this._clientConnections = new Map();
+        this._idStart = Math.floor(Math.random() * (connection.MAX_CONNECTION_ID + 1));
         this._idCache = new Map();
         this._idTimer = null;
+
+        if (this._idStart % 2)
+            this._idStart--;
 
         this._socket.on('message', this.onMessage.bind(this));
         this._socket.on('error', error => { this.emit('error', error); });
@@ -307,14 +311,19 @@ class Node extends EventEmitter {
             this._idCache.set(cacheKey, cache);
         }
 
-        let id = 2;
-        while (id < connection.MAX_CONNECTION_ID) {
+        let range = 0;
+        while (range <= connection.MAX_CONNECTION_ID) {
+            let id = this._idStart + range;
+            if (id > connection.MAX_CONNECTION_ID)
+                id -= connection.MAX_CONNECTION_ID + 2;
+
             let key = this._getKey(host, port, id);
             if (!this._clientConnections.has(key) && !cache.has(id)) {
                 cache.set(id, 0);
                 return id;
             }
-            id += 2;
+
+            range += 2;
         }
 
         throw new Error('Out of connections');

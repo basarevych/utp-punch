@@ -156,9 +156,9 @@ class Connection extends Duplex {
             this.once('flush', closed);
             if (this._timeoutMax) {
                 if (this._timeoutSince)
-                    this.once('timeout', closed);
+                    this.once('timeout', noAnswer);
                 else
-                    closed();
+                    noAnswer();
             }
         };
 

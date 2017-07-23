@@ -25,16 +25,29 @@ class Node extends EventEmitter {
         this._closed = false;
         this._serverConnections = null;
         this._clientConnections = new Map();
+        this._clientIds = new Set();
 
-        this._idStart = Math.floor(Math.random() * (connection.MAX_CONNECTION_ID + 1));
-        if (this._idStart % 2)
-            this._idStart--;
+        this._lastId = Math.floor(Math.random() * (connection.MAX_CONNECTION_ID + 1));
+        if (this._lastId % 2)
+            this._lastId--;
 
         this._socket.on('message', this.onMessage.bind(this));
         this._socket.on('error', error => { this.emit('error', error); });
 
         if (onconnection)
             this.on('connection', onconnection);
+    }
+
+    get maxConnections() {
+        return (connection.MAX_CONNECTION_ID + 1) / 2;
+    }
+
+    get serverConnections() {
+        return this._serverConnections ? this._serverConnections.size : 0;
+    }
+
+    get clientConnections() {
+        return this._clientConnections.size;
     }
 
     getUdpSocket() {
@@ -161,14 +174,16 @@ class Node extends EventEmitter {
             host = '127.0.0.1';
         }
 
-        let id = this._generateId(host, port);
+        let id = this._generateId();
         let key = this._getKey(host, port, id);
         let socket = new connection.Connection(id, port, host, this._socket, null, this._options);
         this._clientConnections.set(key, socket);
+        this._clientIds.add(id);
 
         socket.once('close', () => {
             setTimeout(() => {
                 this._clientConnections.delete(key);
+                this._clientIds.delete(id);
             }, ID_LIFETIME);
         });
 
@@ -288,18 +303,17 @@ class Node extends EventEmitter {
         socket._recvIncoming(packet);
     }
 
-    _generateId(host, port) {
+    _generateId() {
         let range = 0;
-        while (range <= connection.MAX_CONNECTION_ID) {
-            let id = this._idStart + range;
-            if (id > connection.MAX_CONNECTION_ID)
-                id -= connection.MAX_CONNECTION_ID + 2;
+        while (range <= this.maxConnections) {
+            this._lastId = this._lastId + 2;
+            if (this._lastId > connection.MAX_CONNECTION_ID)
+                this._lastId -= connection.MAX_CONNECTION_ID + 2;
 
-            let key = this._getKey(host, port, id);
-            if (!this._clientConnections.has(key))
-                return id;
+            if (!this._clientIds.has(this._lastId))
+                return this._lastId;
 
-            range += 2;
+            range++;
         }
 
         throw new Error('Out of connections');

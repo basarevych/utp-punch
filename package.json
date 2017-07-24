@@ -1,6 +1,6 @@
 {
   "name": "utp-punch",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "license": "MIT",
   "author": "Ross Basarevych <basarevych@gmail.com>",
   "description": "UTP over UDP with hole punching",

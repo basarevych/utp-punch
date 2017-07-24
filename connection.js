@@ -19,7 +19,9 @@ const MIN_PACKET_SIZE = 20;
 const MAX_CONNECTION_ID = 2 << 16 - 1;
 const DEFAULT_WINDOW_SIZE = 1 << 18;
 
-const BUFFER_SIZE = 512;
+const BUFFER_SIZE = 128;
+const RESEND = 250;
+const KEEP_ALIVE = 1000;
 
 const uint32 = function(n) {
     return n >>> 0;
@@ -126,8 +128,8 @@ class Connection extends Duplex {
             });
         }
 
-        let resend = setInterval(this._resend.bind(this), options.resend || 300);
-        let keepAlive = setInterval(this._keepAlive.bind(this), options.keepAlive || 1000);
+        let resend = setInterval(this._resend.bind(this), options.resend || RESEND);
+        let keepAlive = setInterval(this._keepAlive.bind(this), options.keepAlive || KEEP_ALIVE);
         let timeout = setInterval(this._timeout.bind(this), 500);
         let tick = 0;
 

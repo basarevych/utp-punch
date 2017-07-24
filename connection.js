@@ -126,7 +126,7 @@ class Connection extends Duplex {
             });
         }
 
-        let resend = setInterval(this._resend.bind(this), 500);
+        let resend = setInterval(this._resend.bind(this), options.resend || 300);
         let keepAlive = setInterval(this._keepAlive.bind(this), options.keepAlive || 1000);
         let timeout = setInterval(this._timeout.bind(this), 500);
         let tick = 0;

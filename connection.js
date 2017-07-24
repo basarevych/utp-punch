@@ -19,8 +19,8 @@ const MIN_PACKET_SIZE = 20;
 const MAX_CONNECTION_ID = 2 << 16 - 1;
 const DEFAULT_WINDOW_SIZE = 1 << 18;
 
-const BUFFER_SIZE = 128;
-const RESEND = 250;
+const BUFFER_SIZE = 64;
+const RESEND = 100;
 const KEEP_ALIVE = 1000;
 
 const uint32 = function(n) {

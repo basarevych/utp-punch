@@ -217,7 +217,8 @@ class Node extends EventEmitter {
             this._closing = false;
             this._closed = true;
             this._clientConnections.clear();
-            this._serverConnections.clear();
+            if (this._serverConnections)
+                this._serverConnections.clear();
             this.emit('close');
         };
         let onClose = () => {

@@ -6,7 +6,7 @@ could be lost with no notification, come duplicated or in the wrong
 order.
 
 uTP (micro transport protocol) was invented by torrent people to
-safely transmit files over UDP. Basically it adds TCP feature to UDP:
+safely transmit files over UDP. Basically it adds TCP features to UDP:
 lost packets are automatically retransmitted, order is guaranteed,
 duplicates rejected.
 
@@ -15,12 +15,12 @@ This library implements uTP over UDP so when connected you receive a
 'data' when receiving data, it has .write() method for you to send a
 Buffer. Much like tcp socket this is a Node.js stream.
 
-**utp-punch** however might not be compatible with other uTP implementations
+The library however might not be compatible with other uTP implementations
 (so you need to use this very same library on both the peers) because
 it adds the following feature: the same instance of a class can be used
-both as a server and a client at the same time. So you can create a Node,
-bind it to a port and at the same time start listening for incoming
-connections and make outgoing connections from the same port.
+both as a server and a client at the same time on the same port. So you
+can create a Node, bind it to a port and at the same time start listening
+for incoming connections and also make outgoing connections from it.
 
 ## UDP hole punching
 
@@ -31,7 +31,7 @@ When server and/or client are behind NAT they normally do not have an
 Internet IP address to bind to in order to receive incoming connections.
 
 UDP hole punching tricks firewalls into opening a temporarily hole for
-its client, so a port on the NAT device becomes bound to the port of
+its user, so a port on the NAT device becomes bound to the port of
 the server/client inside the LAN.
 
 In order for it to work both server and client must use a third-party
@@ -49,7 +49,7 @@ directly between these NATed server and client.
 npm install --save utp-punch
 ```
 
-```javascript
+```
 const Node = require('utp-punch');
 
 let server = new Node(socket => {

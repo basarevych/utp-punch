@@ -3,8 +3,8 @@ const EventEmitter = require('events').EventEmitter;
 const debug = require('debug')('utp');
 const connection = require('./connection');
 
-const PUNCH_SYN = "PUNCH";
-const PUNCH_ACK = "PUNCHED";
+const PUNCH_SYN = 'PUNCH';
+const PUNCH_ACK = 'PUNCHED';
 
 const ID_LIFETIME = 5 * 1000; // ms
 
@@ -95,7 +95,9 @@ class Node extends EventEmitter {
         port = parseInt(port);
         let synBuffer = Buffer.from(PUNCH_SYN);
         let ackBuffer = Buffer.from(PUNCH_ACK);
-        let ackSent = false, ackReceived = false, done = false;
+        let ackSent = false;
+        let ackReceived = false;
+        let done = false;
         let punchCounter = 0;
 
         let onMessage = (data, rinfo) => {
@@ -245,7 +247,8 @@ class Node extends EventEmitter {
         if (message.length < connection.MIN_PACKET_SIZE) return;
 
         let packet = connection.bufferToPacket(message);
-        let reply = false, id = packet.connection;
+        let reply = false;
+        let id = packet.connection;
         if (id % 2) {
             reply = true;
             id--;

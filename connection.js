@@ -1,5 +1,4 @@
 const cyclist = require('cyclist');
-const util = require('util');
 const { Duplex } = require('stream');
 const debug = require('debug')('utp');
 
@@ -23,25 +22,25 @@ const BUFFER_SIZE = 64;
 const RESEND = 100;
 const KEEP_ALIVE = 1000;
 
-const uint32 = function(n) {
+const uint32 = function (n) {
     return n >>> 0;
 };
 
-const uint16 = function(n) {
+const uint16 = function (n) {
     return n & UINT16;
 };
 
-const timestamp = function() {
+const timestamp = (function () {
     let offset = process.hrtime();
     let then = Date.now() * 1000;
 
-    return function() {
+    return function () {
         let diff = process.hrtime(offset);
         return uint32(then + 1000000 * diff[0] + ((diff[1] / 1000) | 0));
     };
-}();
+})();
 
-const bufferToPacket = function(buffer) {
+const bufferToPacket = function (buffer) {
     let packet = {};
     packet.id = buffer[0] & ID_MASK;
     packet.connection = buffer.readUInt16BE(2);
@@ -54,7 +53,7 @@ const bufferToPacket = function(buffer) {
     return packet;
 };
 
-const packetToBuffer = function(packet) {
+const packetToBuffer = function (packet) {
     let buffer = Buffer.alloc(20 + (packet.data ? packet.data.length : 0));
     buffer[0] = packet.id | VERSION;
     buffer[1] = EXTENSION;
@@ -68,7 +67,7 @@ const packetToBuffer = function(packet) {
     return buffer;
 };
 
-const createPacket = function(connection, id, data) {
+const createPacket = function (connection, id, data) {
     return {
         id: id,
         connection: connection._server ? uint16(connection.id + 1) : connection.id,
@@ -266,14 +265,16 @@ class Connection extends Duplex {
 
         debug(`${this.host}/${this.port}/${this._server ? this.id + 1 : this.id}: Packet loss since #${offset}`);
         for (let i = 0; i < this._inflightPackets; i++) {
-            let packet = this._outgoing.get(offset+i);
+            let packet = this._outgoing.get(offset + i);
             if (uint32(packet.sent - now) >= timeout) this._transmit(packet);
         }
     }
 
     _keepAlive() {
-        if (this._alive) return this._alive = false;
-        this._sendAck();
+        if (this._alive)
+            this._alive = false;
+        else
+            this._sendAck();
     }
 
     _timeout() {
@@ -299,7 +300,7 @@ class Connection extends Duplex {
         if (acked >= this._bufferSize) return; // sanity check
 
         for (let i = 0; i < acked; i++) {
-            this._outgoing.del(offset+i);
+            this._outgoing.del(offset + i);
             this._inflightPackets--;
         }
 
@@ -341,7 +342,7 @@ class Connection extends Duplex {
         if (this._connecting) {
             if (packet.id !== PACKET_STATE) return this._incoming.put(packet.seq, packet);
 
-            this._ack = uint16(packet.seq-1);
+            this._ack = uint16(packet.seq - 1);
             this._recvAck(packet.ack);
             this._connecting = false;
             this.emit('connect');
@@ -357,8 +358,8 @@ class Connection extends Duplex {
         if (packet.id === PACKET_STATE) return;
         this._incoming.put(packet.seq, packet);
 
-        while (packet = this._incoming.del(this._ack+1)) {
-            this._ack = uint16(this._ack+1);
+        while ((packet = this._incoming.del(this._ack + 1))) {
+            this._ack = uint16(this._ack + 1);
 
             if (packet.id === PACKET_DATA && packet.data) this.push(packet.data);
             if (packet.id === PACKET_FIN)  this.push(null);

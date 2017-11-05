@@ -3,16 +3,30 @@
   "version": "0.2.17",
   "license": "MIT",
   "author": "Ross Basarevych <basarevych@gmail.com>",
-  "description": "UTP over UDP with hole punching",
+  "description": "UTP over UDP with NAT hole punching",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/basarevych/utp-punch.git"
   },
-  "dependencies": {
-    "cyclist": "~1.0.1",
-    "debug": "~2.6.8"
-  },
+  "keywords": [
+    "udp",
+    "utp",
+    "nat",
+    "hole punch"
+  ],
   "scripts": {
     "test": "node tests"
+  },
+  "dependencies": {
+    "cyclist": "~1.0.1",
+    "debug": "~3.1.0"
+  },
+  "devDependencies": {
+    "eslint": "~4.10.0",
+    "eslint-config-standard": "~10.2.1",
+    "eslint-plugin-import": "~2.8.0",
+    "eslint-plugin-node": "~5.2.1",
+    "eslint-plugin-promise": "~3.6.0",
+    "eslint-plugin-standard": "~3.0.1"
   }
 }

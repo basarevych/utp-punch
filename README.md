@@ -55,13 +55,13 @@ const Node = require('utp-punch');
 let server = new Node(socket => {
   console.log('server: socket connected');
   socket.on('data', data => {
-  console.log(`server: received '${data.toString()}'`);
-  socket.write('world');
-  socket.end();
+    console.log(`server: received '${data.toString()}'`);
+    socket.write('world');
+    socket.end();
   });
   socket.on('end', () => {
-  console.log('server: socket disconnected');
-  server.close(); // this is how you terminate node
+    console.log('server: socket disconnected');
+    server.close(); // this is how you terminate node
   });
 });
 server.bind(20000, '127.0.0.1'); // bind to port 20000
@@ -75,8 +75,8 @@ client.connect(20000, '127.0.0.1, socket => {
   console.log('client: socket connected');
   socket.on('data', data => console.log(`client: received '${data.toString()}'`));
   socket.on('end', () => {
-  console.log('client: socket disconnected');
-  client.close(); // this is how you terminate node
+    console.log('client: socket disconnected');
+    client.close(); // this is how you terminate node
   });
   socket.write('hello');
 });
@@ -92,7 +92,7 @@ server.bind(20000);
 
 let client = new Node();
 client.bind(30000); // client needs dedicated port
-  // just as the server
+                    // just as the server
 
 // the following two .punch() calls must happen simultaneously
 
@@ -105,12 +105,12 @@ server.punch(10, 30000, success => { // ten attempts
 client.punch(10, 20000, success => { // ten attempts
   if (success) {
   client.connect(20000, socket => {
-  // if the server had also been successful in punching
-  // this will succeed
+    // if the server had also been successful in punching
+    // this will succeed
   });
   client.on('timeout', () => {
-  // if the server had failed in punching we won't be
-  // able to connect
+    // if the server had failed in punching we won't be
+    // able to connect
   });
   }
 });

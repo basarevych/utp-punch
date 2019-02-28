@@ -10,14 +10,15 @@ tracker.on('error', err => {
 });
 
 tracker.on('message', (msg, rinfo) => {
+  const text = msg.toString();
   let message;
   try {
-    message = JSON.parse(msg.toString());
+    message = JSON.parse(text);
   } catch (error) {
     return; // ignore garbage
   }
 
-  console.log(`tracker got: ${message} from ${rinfo.address}:${rinfo.port}`);
+  console.log(`tracker got: ${text} from ${rinfo.address}:${rinfo.port}`);
 
   if (message.name === 'SERVER') {
     server = {

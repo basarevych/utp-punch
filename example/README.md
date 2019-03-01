@@ -24,4 +24,4 @@ env DEBUG="*" node example/client.js 192.168.10.10
 
 6. You will see the VMs playing ping-pong even though they are both behind NAT
 
-You can ommit setting DEBUG env variable to make it less verbose
+You can omit setting DEBUG env variable to make it less verbose
